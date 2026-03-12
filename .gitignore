@@ -2,6 +2,9 @@
 bin/
 cloud-aggregator
 *.exe
+
+# Keys
+keys/
 *.key
 
 # OS specific
