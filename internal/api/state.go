@@ -2,58 +2,80 @@ package api
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 )
 
 type AggregationSession struct {
-	TotalSum int64
-	Count    int
-	Meters   map[string]bool
+	Count  int
+	Meters map[string]int64 // Storing meterID -> share to export them individually
 }
 
 type MemoryStore struct {
 	mu             sync.Mutex
 	Sessions       map[int64]*AggregationSession
 	ExpectedMeters int
+	NodeID         int
+	OutputPath     string
 }
 
-func NewMemoryStore(expected int) *MemoryStore {
+func NewMemoryStore(expected int, nodeID int, outputPath string) *MemoryStore {
 	return &MemoryStore{
 		Sessions:       make(map[int64]*AggregationSession),
 		ExpectedMeters: expected,
+		NodeID:         nodeID,
+		OutputPath:     outputPath,
 	}
 }
 
-func (store *MemoryStore) AddShare(timestamp int64, meterID string, share int64) (bool, float64) {
+func (store *MemoryStore) AddShare(timestamp int64, meterID string, share int64) (bool, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 
 	session, exists := store.Sessions[timestamp]
 	if !exists {
 		session = &AggregationSession{
-			TotalSum: 0,
-			Count:    0,
-			Meters:   make(map[string]bool),
+			Count:  0,
+			Meters: make(map[string]int64),
 		}
 		store.Sessions[timestamp] = session
 	}
 
-	if session.Meters[meterID] {
-		return false, 0
+	// Prevent duplicates within the same timestamp
+	if _, ok := session.Meters[meterID]; ok {
+		return false, nil
 	}
 
-	session.Meters[meterID] = true
-	session.TotalSum += share
+	session.Meters[meterID] = share
 	session.Count++
 
-	fmt.Printf("[AGGREGATOR] Progress for time %d: %d/%d meters\n", timestamp, session.Count, store.ExpectedMeters)
+	fmt.Printf("[AGGREGATOR] Progress for timestamp %d: %d/%d meters\n", timestamp, session.Count, store.ExpectedMeters)
 
 	if session.Count == store.ExpectedMeters {
-		average := float64(session.TotalSum) / float64(store.ExpectedMeters)
+		// As soon as the bucket is full, export to RAM Disk immediately
+		err := store.exportToRAMDisk(session.Meters)
+
+		// Clear session to free up memory
 		delete(store.Sessions, timestamp)
 
-		return true, average
+		return true, err
 	}
 
-	return false, 0
+	return false, nil
+}
+
+// exportToRAMDisk is an internal helper method for MP-SPDZ integration
+func (store *MemoryStore) exportToRAMDisk(meters map[string]int64) error {
+	// MP-SPDZ Input files follow the convention: Input-P<playerID>-<threadID>
+	fileName := fmt.Sprintf("Input-P%d-0", store.NodeID)
+	fullPath := filepath.Join(store.OutputPath, fileName)
+
+	var content string
+	for _, share := range meters {
+		content += fmt.Sprintf("%d\n", share)
+	}
+
+	// Writing to RAM Disk (tmpfs) for high performance
+	return os.WriteFile(fullPath, []byte(content), 0644)
 }

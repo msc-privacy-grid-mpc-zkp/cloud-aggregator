@@ -1,0 +1,44 @@
+# variance.mpc
+# MPC Script for calculating Street Consumption Variance
+
+def calculate_variance():
+    # 1. Definisanje parametara
+    num_meters = 10
+
+    # Sintaksa za učitavanje podataka koje je Go Aggregator upisao u Input-Px-0
+    # sintint je "secret integer" - podatak koji ostaje sakriven (shared)
+    shares = sint.get_input_from(0, size=num_meters)
+    # Napomena: U MP-SPDZ, P0 se obično koristi kao "master" za unos,
+    # ali pošto svaki server čita svoj Input-Px-0, get_input_from(0)
+    # zapravo instrukcije svakom playeru da povuče svoj share iz svog fajla.
+
+    # 2. Izračunavanje sume i proseka
+    total_sum = sum(shares)
+
+    # MP-SPDZ radi sa celim brojevima (fixed-point), pa ćemo prosek
+    # držati kao sum/num_meters u kasnijoj formuli da izbegnemo gubitak preciznosti
+
+    # 3. Izračunavanje varijanse: Var = [Sum(x^2) / n] - (Sum(x)/n)^2
+    # Prvo: Suma kvadrata (Sum(x^2))
+    sum_of_squares = sint(0)
+    for x in shares:
+        sum_of_squares += x * x  # Ovde se troši "kriptografsko smeće" (množenje)
+
+    # Drugo: (Sum(x))^2
+    total_sum_sq = total_sum * total_sum
+
+    # Treće: Finalna formula (pomnožena sa n^2 da ostanemo u celim brojevima do kraja)
+    # n * Sum(x^2) - (Sum(x))^2
+    variance_scaled = (num_meters * sum_of_squares) - total_sum_sq
+
+    # 4. Otkrivanje rezultata (Reveal)
+    # U realnom sistemu, prosek i varijansu otkrivamo samo autorizovanom entitetu
+    actual_variance = variance_scaled.reveal() / (num_meters * num_meters)
+    actual_avg = total_sum.reveal() / num_meters
+
+    print_ln("MPC Results for current cycle:")
+    print_ln(" - Average Consumption: %s W", actual_avg)
+    print_ln(" - Calculated Variance: %s", actual_variance)
+
+# Pokretanje funkcije
+calculate_variance()

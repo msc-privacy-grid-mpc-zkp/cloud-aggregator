@@ -8,11 +8,10 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
-// AppConfig maps YAML sections and Environment variables
 type AppConfig struct {
 	Server struct {
 		Port string `yaml:"port" env:"SERVER_PORT" env-default:"8080"`
-		Name string `yaml:"name" env:"SERVER_NAME" env-default:"Server A"`
+		Name string `yaml:"name" env:"SERVER_NAME" env-default:"MPC Node"`
 	} `yaml:"server"`
 
 	ZKP struct {
@@ -22,10 +21,12 @@ type AppConfig struct {
 
 	Aggregator struct {
 		ExpectedMeters int `yaml:"expected_meters" env:"EXPECTED_METERS" env-default:"10"`
+		// Novi parametri za MP-SPDZ integraciju
+		NodeID     int    `yaml:"node_id" env:"NODE_ID" env-default:"0"`
+		OutputPath string `yaml:"output_path" env:"OUTPUT_PATH" env-default:"/dev/shm/mp-spdz"`
 	} `yaml:"aggregator"`
 }
 
-// LoadConfig reads configuration from a YAML file or Environment variables
 func LoadConfig() (*AppConfig, error) {
 	configPath := flag.String("config", "config.yaml", "Path to YAML configuration")
 	flag.Parse()
@@ -40,7 +41,7 @@ func LoadConfig() (*AppConfig, error) {
 		}
 	}
 
-	// Safety check
+	// Safety checks
 	if cfg.Aggregator.ExpectedMeters < 1 {
 		cfg.Aggregator.ExpectedMeters = 10
 	}

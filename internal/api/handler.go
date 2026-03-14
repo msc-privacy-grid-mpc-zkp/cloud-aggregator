@@ -3,10 +3,11 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/consensys/gnark/backend/groth16"
-	"github.com/msc-privacy-grid-mpc-zkp/cloud-aggregator/internal/zkp"
 	"log"
 	"net/http"
+
+	"github.com/consensys/gnark/backend/groth16"
+	"github.com/msc-privacy-grid-mpc-zkp/cloud-aggregator/internal/zkp"
 )
 
 type ProofPayload struct {
@@ -30,11 +31,12 @@ func HandleProof(verifyingKey groth16.VerifyingKey, store *MemoryStore, maxLimit
 		}
 
 		defer func() {
-			if closeErr := r.Body.Close(); closeErr != nil {
-				log.Printf("[WARNING] Failed to close request body for meter %s: %v\n", payload.MeterID, closeErr)
+			if err := r.Body.Close(); err != nil {
+				log.Printf("[WARNING] Failed to close request body for meter %s: %v\n", payload.MeterID, err)
 			}
 		}()
 
+		// 1. ZKP Verification
 		err := zkp.VerifyProof(payload.Proof, maxLimit, verifyingKey)
 		if err != nil {
 			log.Printf("[SECURITY ALERT] Invalid proof from %s: %v\n", payload.MeterID, err)
@@ -42,16 +44,24 @@ func HandleProof(verifyingKey groth16.VerifyingKey, store *MemoryStore, maxLimit
 			return
 		}
 
-		isComplete, average := store.AddShare(payload.Timestamp, payload.MeterID, payload.MeterShare)
+		// 2. Add share and trigger MPC export if bucket is full
+		isComplete, err := store.AddShare(payload.Timestamp, payload.MeterID, payload.MeterShare)
+		if err != nil {
+			log.Printf("[ERROR] Failed to export data to RAM Disk: %v\n", err)
+			http.Error(w, "Internal server error during data export", http.StatusInternalServerError)
+			return
+		}
 
 		if isComplete {
 			fmt.Printf("\n=================================================\n")
-			fmt.Printf("🚀 [SUCCESS] Aggregation complete for time: %d\n", payload.Timestamp)
-			fmt.Printf("📊 CALCULATED AVERAGE STREET CONSUMPTION: %.2f W\n", average)
+			fmt.Printf("🚀 [SUCCESS] Aggregation complete for timestamp: %d\n", payload.Timestamp)
+			fmt.Printf("📂 DATA EXPORTED TO RAM DISK FOR MP-SPDZ\n")
 			fmt.Printf("=================================================\n\n")
 		}
 
-		fmt.Printf("[API] Validated ZKP from %s | Limit: %d\n", payload.MeterID, maxLimit)
+		// Optional: Log every successful validation to keep track of progress
+		// log.Printf("[API] Validated ZKP from %s\n", payload.MeterID)
+
 		w.WriteHeader(http.StatusOK)
 	}
 }

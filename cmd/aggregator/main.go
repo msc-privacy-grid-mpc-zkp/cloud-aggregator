@@ -27,7 +27,11 @@ func main() {
 	fmt.Println("[SECURITY] ZKP Verifying Key loaded successfully!")
 
 	// 3. Initialize memory store and start server
-	store := api.NewMemoryStore(cfg.Aggregator.ExpectedMeters)
+	store := api.NewMemoryStore(
+		cfg.Aggregator.ExpectedMeters,
+		cfg.Aggregator.NodeID,
+		cfg.Aggregator.OutputPath,
+	)
 	address := ":" + cfg.Server.Port
 	api.StartServer(address, verifyingKey, store, cfg.ZKP.MaxLimit)
 }
