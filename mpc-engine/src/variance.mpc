@@ -1,0 +1,43 @@
+num_meters = 10
+scale = sfix(1000)  # normalizacioni faktor za stabilnost
+
+print_ln("=========== MPC PROGRAM START ===========")
+
+values = []
+sum_x = sfix(0)
+
+# Čitanje inputa i rekonstrukcija
+for i in range(num_meters):
+    share0 = sint.get_input_from(0)
+    share1 = sint.get_input_from(1)
+    share2 = sint.get_input_from(2)
+
+    x_sint = share0 + share1 + share2
+
+    # Skališemo vrednosti radi stabilnosti
+    x = sfix(x_sint) / scale
+
+    print_ln("Meter %s consumption (scaled): %s", i, x.reveal())
+
+    values.append(x)
+    sum_x += x
+
+print_ln("=========== INPUTS READ ===========")
+
+# Mean
+mean = sum_x / num_meters
+print_ln("=========== MEAN CONSUMPTION ===========")
+print_ln("Mean value (scaled): %s", mean.reveal())
+
+# Variance
+var_sum = sfix(0)
+for x in values:
+    diff = x - mean
+    var_sum += diff * diff
+
+variance = var_sum / num_meters
+
+print_ln("=========== VARIANCE ===========")
+print_ln("Variance value (scaled): %s", variance.reveal())
+
+print_ln("=========== MPC PROGRAM END ===========")
